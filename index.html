@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>🌸 Translator Nhật ⇄ Việt (Romanji + Voice)</title>
+<style>
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: linear-gradient(180deg, #f2f6ff, #e7edff);
+    padding: 24px;
+  }
+  .card {
+    max-width: 720px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: 0 8px 20px rgba(0,0,0,.08);
+  }
+  textarea {
+    width: 100%;
+    min-height: 110px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid #ddd;
+    font-size: 15px;
+    resize: vertical;
+  }
+  select, button {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  button {
+    background: #4e73df;
+    color: white;
+    border: none;
+  }
+  button:hover:not(:disabled) { background: #3c5ed8; }
+  button:disabled { opacity: .6; cursor: not-allowed; }
+  .out {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 8px;
+    background: #f9fbff;
+    border: 1px solid #eee;
+    white-space: pre-wrap;
+    font-size: 16px;
+  }
+  .romanji {
+    color: #555;
+    font-style: italic;
+    margin-top: 8px;
+  }
+  #status {
+    color: #666;
+    font-size: 13px;
+  }
+  footer {
+    text-align: center;
+    margin-top: 20px;
+    color: #777;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>🌸 Translator Nhật ⇄ Việt (Romanji + Voice)</h2>
+  <textarea id="input" placeholder="Nhập văn bản...">今日はどうですか？</textarea>
+  <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <select id="from">
+      <option value="auto">auto</option>
+      <option value="ja">ja</option>
+      <option value="vi">vi</option>
+      <option value="en">en</option>
+    </select>
+    ⇄
+    <select id="to">
+      <option value="vi">vi</option>
+      <option value="ja">ja</option>
+      <option value="en">en</option>
+    </select>
+    <button id="btn">Dịch</button>
+    <button id="speakBtn" disabled>🔊 Phát âm</button>
+    <div id="status"></div>
+  </div>
+
+  <div class="out" id="out">Kết quả sẽ hiện ở đây...</div>
+  <div class="romanji" id="romanji"></div>
+
+  <div style="margin-top:10px;color:#777;font-size:13px">
+    Sử dụng <b>Google Apps Script API</b> để dịch & chuyển Romanji.<br>
+    Phát âm dùng <b>SpeechSynthesis API</b> (giọng cục bộ của thiết bị).
+  </div>
+</div>
+
+<footer>© 2025 - Web được thực hiện bởi Ken</footer>
+
+<script src="https://unpkg.com/wanakana"></script>
+<script>
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzAICigheXKYUsTbz40wBvBZoO7e1QwpnshdmXNKssfruroT7ATW6-kKr3fL-cDH7GG/exec"; 
+const input = document.getElementById('input');
+const fromSel = document.getElementById('from');
+const toSel = document.getElementById('to');
+const btn = document.getElementById('btn');
+const out = document.getElementById('out');
+const romanjiBox = document.getElementById('romanji');
+const status = document.getElementById('status');
+const speakBtn = document.getElementById('speakBtn');
+
+let lastTranslatedText = "";
+let lastLang = "ja-JP";
+
+btn.addEventListener('click', translate);
+speakBtn.addEventListener('click', speakText);
+
+input.addEventListener('input', () => {
+  const v = input.value.trim();
+  if (!v) {
+    out.textContent = "Kết quả sẽ hiện ở đây...";
+    romanjiBox.textContent = "";
+    speakBtn.disabled = true;
+    status.textContent = "";
+    return;
+  }
+
+  // Nhận dạng hướng dịch, nhưng KHÔNG reset khi xóa
+  if (/[\u3040-\u30ff\u4e00-\u9fff]/.test(v)) {
+    fromSel.value = 'ja';
+    toSel.value = 'vi';
+  } else if (/[\u00C0-\u1EF9]/.test(v)) {
+    fromSel.value = 'vi';
+    toSel.value = 'ja';
+  }
+});
+
+async function translate(){
+  const text = input.value.trim();
+  if (!text) { out.textContent = "⚠️ Vui lòng nhập văn bản."; return; }
+
+  out.textContent = "⏳ Đang dịch...";
+  romanjiBox.textContent = "";
+  speakBtn.disabled = true;
+  status.textContent = "";
+
+  try {
+    const url = `${SCRIPT_URL}?text=${encodeURIComponent(text)}&source=${encodeURIComponent(fromSel.value)}&target=${encodeURIComponent(toSel.value)}`;
+    const r = await fetch(url);
+    const j = await r.json();
+
+    if (j.error) throw new Error(j.error);
+
+    out.textContent = j.translated || "(Không có kết quả)";
+    if (fromSel.value === 'ja' || toSel.value === 'ja') {
+      romanjiBox.textContent = j.romanji ? "→ Romanji: " + j.romanji : "(Không có romanji)";
+    } else {
+      romanjiBox.textContent = "";
+    }
+
+    lastTranslatedText = j.translated;
+    lastLang = (toSel.value === "ja") ? "ja-JP" : (toSel.value === "vi" ? "vi-VN" : "en-US");
+    speakBtn.disabled = false;
+    status.textContent = "✅ Hoàn tất";
+
+  } catch (err) {
+    out.textContent = '❌ Lỗi: ' + err.message;
+    status.textContent = "Lỗi";
+  }
+}
+
+function speakText(){
+  if (!lastTranslatedText) return;
+  const utter = new SpeechSynthesisUtterance(lastTranslatedText);
+  utter.lang = lastLang;
+  utter.rate = 1.0;
+  utter.pitch = 1.0;
+  speechSynthesis.speak(utter);
+}
+</script>
+</body>
+</html>
